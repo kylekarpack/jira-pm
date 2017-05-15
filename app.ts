@@ -61,10 +61,14 @@ request({
             
             // Ensure the day of the worklog is correct
             if (moment(log.created).isSame(targetDate, "d")) {
-                jiraTaskMap[issue.key] = {
-                    date: new Date(log.created),
-                    time: log.timeSpentSeconds   
-                };
+                if (jiraTaskMap[issue.key]) {
+                    jiraTaskMap[issue.key].time += log.timeSpentSeconds;
+                } else {
+                    jiraTaskMap[issue.key] = {
+                        date: new Date(log.created),
+                        time: log.timeSpentSeconds   
+                    };
+                }
             }            
         }
     }
