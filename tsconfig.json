@@ -3,6 +3,7 @@
     "compilerOptions": {
         "noImplicitAny": false,
         "preserveConstEnums": true,
-        "sourceMap": true
+        "sourceMap": true,
+        "typeRoots": ["./interfaces"]
     }
 }

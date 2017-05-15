@@ -2,10 +2,11 @@
  * Created by Kyle Karpack on 2/10/2017.
  */
 
-/// <reference path="index.d.ts" />
-
 // Import interfaces
 import {IConfig} from "./interfaces/IConfig";
+import {JIRA} from "./interfaces/IJIRA";
+import {ProjectManager} from "./interfaces/IProjectManager";
+
 
 // Import node modules
 import * as request from "request";
@@ -42,7 +43,7 @@ if (args.d) {
 }
 
 // Constants
-const url: string = `https://net-inspect.atlassian.net/rest/api/latest/search?fields=worklog&jql=worklogAuthor = currentUser() AND worklogDate = ${targetDateString}`;
+const url: string = `https://net-inspect.atlassian.net/rest/api/latest/search?fields=worklog,status&jql=worklogAuthor = currentUser() AND worklogDate = ${targetDateString}`;
 
 
 // Run
@@ -51,7 +52,7 @@ request({
     headers: config.JIRA_HEADERS
 }, (err, response) => {
     
-   const body = JSON.parse(response.body);
+   const body: JIRA.IJIRA = JSON.parse(response.body);
 
    const jiraTaskMap = {};
 
@@ -65,8 +66,9 @@ request({
                     jiraTaskMap[issue.key].time += log.timeSpentSeconds;
                 } else {
                     jiraTaskMap[issue.key] = {
-                        date: new Date(log.created),
-                        time: log.timeSpentSeconds   
+                        date: moment(log.created).toDate(),
+                        time: log.timeSpentSeconds ,
+                        status: issue.fields.status && issue.fields.status.name 
                     };
                 }
             }            
@@ -90,7 +92,7 @@ request({
             return;
         }
 
-        const projects = JSON.parse(response.body).projects;
+        const projects: ProjectManager.IProject[] = JSON.parse(response.body).projects;
 
         let wait = 0,
             output = [],
@@ -107,15 +109,14 @@ request({
                 request({
                     url: `https://api.projectmanager.com/api/v1/projects/${project.id}/tasks.json`,
                     headers: config.PM_HEADERS
-                }, (err, tasks) => {
+                }, (err, response) => {
                     
                     if (err) {
                         console.error(err);
-                    } else if (tasks.statusCode !== 200) {
-                        console.error("ERROR", tasks.body);
+                    } else if (response.statusCode !== 200) {
+                        console.error("ERROR", response.body);
                     } else {
-                        tasks = JSON.parse(tasks.body);
-                        tasks = tasks.tasks;
+                        let tasks: ProjectManager.ITask[] = JSON.parse(response.body).tasks;
 
                         for (let task of tasks) {
                             const key = task.name.split(" ")[0], 
@@ -150,7 +151,7 @@ request({
         const proceed = (worklogs): any => {
             
             console.log(`Found ${worklogs.length} matching tasks in Project Manager on ${targetDate.format("MM/DD/YYYY")}`);
-            console.log(`Proceeding to log work...`);
+            console.log(`\x1b[36m`, `Proceeding to log work...`, `\x1b[0m`);
 
             let wait = 0,
                 count = 0,
@@ -159,14 +160,13 @@ request({
             for (let worklog of worklogs) {
                 wait++;
 
-                const d: Date = worklog.jira.date;
-                const key = worklog.key;
-                const deferred = Q.defer();
+                const key = worklog.key,
+                    deferred = Q.defer();
 
                 promises.push(deferred.promise);
 
-                worklog.date = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-                worklog.hours = worklog.jira.time / 60 / 60;
+                worklog.date = moment(worklog.jira.date).format("YYYY-MM-DD");
+                worklog.hours = Math.round(worklog.jira.time / 60 / 60 * 100) / 100;
 
                 setTimeout(() => {
                     request({
@@ -203,9 +203,9 @@ request({
 
         Q.allSettled(promises).then((promises) => {
             proceed(output).then(() => {
-                console.log("Success!");
+                console.log(`\x1b[42m`, `Success!`, `\x1b[0m`);
             }, err => {
-                console.log("Error!");
+               console.log(`\x1b[41m`, `Error!`, `\x1b[0m`);
             });
         });
 
