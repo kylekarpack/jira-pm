@@ -1,0 +1,17 @@
+{
+  "name": "jira-pm",
+  "version": "0.1.1",
+  "description": "Automatically log hours in project manager from JIRA Tempo",
+  "author": "Kyle Karpack <kyle.karpack@net-inspect.com>",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "main": "app.js",
+  "dependencies": {
+    "minimist": "^1.2.0",
+    "moment": "^2.18.1",
+    "q": "^1.5.0",
+    "request": "^2.81.0"
+  },
+  "license": "MIT"
+}

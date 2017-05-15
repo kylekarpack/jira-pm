@@ -1,0 +1,8 @@
+{
+    "compileOnSave": true,
+    "compilerOptions": {
+        "noImplicitAny": false,
+        "preserveConstEnums": true,
+        "sourceMap": true
+    }
+}
