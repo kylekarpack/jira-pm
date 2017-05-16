@@ -1,6 +1,6 @@
 {
   "name": "jira-pm",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Automatically log hours in project manager from JIRA Tempo",
   "author": "Kyle Karpack <kyle.karpack@net-inspect.com>",
   "scripts": {
