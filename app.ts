@@ -36,10 +36,13 @@ let targetDate,
 
 if (args.d) {
     targetDate = moment(args.d);
-    targetDateString = args.d
+    if (!targetDate.isValid()) {
+        throw `Could not parse provided date: ${args.d}`;
+    }
+    targetDateString = targetDate.format("YYYY-MM-DD");
 } else {
     targetDate = moment();
-    targetDateString = "startOfDay()";
+    targetDateString = "endOfDay()";
 }
 
 // Constants
