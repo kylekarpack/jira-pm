@@ -8,10 +8,18 @@
   },
   "main": "app.js",
   "dependencies": {
+    "@types/es6-promise": "0.0.32",
+    "@types/minimist": "^1.2.0",
+    "@types/moment": "^2.13.0",
+    "@types/q": "^1.0.0",
+    "@types/request": "0.0.43",
     "minimist": "^1.2.0",
     "moment": "^2.18.1",
     "q": "^1.5.0",
     "request": "^2.81.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^7.0.18"
+  }
 }

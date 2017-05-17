@@ -7,8 +7,8 @@ import {IConfig} from "./interfaces/IConfig";
 import {JIRA} from "./interfaces/IJIRA";
 import {ProjectManager} from "./interfaces/IProjectManager";
 
-
 // Import node modules
+
 import * as request from "request";
 import * as moment from "moment";
 import * as minimist from "minimist";
@@ -16,7 +16,8 @@ import * as Q from "Q";
 
 
 // Get configuration
-const config: IConfig = require("./config.json");
+const config: IConfig = require("./config.json"),
+    start = new Date();
 
 if (!config) {
     throw "Config file required (config.json)";
@@ -49,39 +50,57 @@ if (args.d) {
 const url: string = `https://net-inspect.atlassian.net/rest/api/latest/search?fields=worklog,status&jql=worklogAuthor = currentUser() AND worklogDate = ${targetDateString}`;
 
 
-// Run
-request({
-    url: url,
-    headers: config.JIRA_HEADERS
-}, (err, response) => {
-    
-   const body: JIRA.IJIRA = JSON.parse(response.body);
+// Functions
+const getJIRAWorklogs = (): Q.Promise<any> => {
 
-   const jiraTaskMap = {};
-
-    for (let issue of body.issues) {
-        
-        for (let log of issue.fields.worklog.worklogs) {
-            
-            // Ensure the day of the worklog is correct
-            if (moment(log.created).isSame(targetDate, "d")) {
-                if (jiraTaskMap[issue.key]) {
-                    jiraTaskMap[issue.key].time += log.timeSpentSeconds;
-                } else {
-                    jiraTaskMap[issue.key] = {
-                        date: moment(log.created).toDate(),
-                        time: log.timeSpentSeconds ,
-                        status: issue.fields.status && issue.fields.status.name 
-                    };
-                }
-            }            
-        }
-    }
-
-    console.log(`Found ${Object.keys(jiraTaskMap).length} issues with JIRA Tempo worklogs on ${targetDate.format("MM/DD/YYYY")}`);
-
+    const deferred = Q.defer();
 
     request({
+        url: url,
+        headers: config.JIRA_HEADERS
+    }, (err, response) => {
+
+        if (err) {
+            deferred.reject(null);
+        }
+        
+        const body: JIRA.IJIRA = JSON.parse(response.body);
+
+        const jiraTaskMap = {};
+
+        for (let issue of body.issues) {
+            
+            for (let log of issue.fields.worklog.worklogs) {
+                
+                // Ensure the day of the worklog is correct
+                if (moment(log.created).isSame(targetDate, "d")) {
+                    if (jiraTaskMap[issue.key]) {
+                        jiraTaskMap[issue.key].time += log.timeSpentSeconds;
+                    } else {
+                        jiraTaskMap[issue.key] = {
+                            date: moment(log.created).toDate(),
+                            time: log.timeSpentSeconds ,
+                            status: issue.fields.status && issue.fields.status.name 
+                        };
+                    }
+                }            
+            }
+        }
+
+        deferred.resolve(jiraTaskMap);
+
+    });
+
+    return deferred.promise;
+
+};
+
+
+const getProjectManagerTasks = (jiraTaskMap): Q.Promise<any> => {
+
+    const deferred = Q.defer();
+
+     request({
         method: "GET",
         url: `https://api.projectmanager.com/api/v1/resources/${config.RESOURCE_ID}/assignedProjects.json`,
         headers: config.PM_HEADERS
@@ -95,17 +114,17 @@ request({
             return;
         }
 
-        const projects: ProjectManager.IProject[] = JSON.parse(response.body).projects;
-
         let wait = 0,
             output = [],
             promises = [];
 
+        const projects: ProjectManager.IProject[] = JSON.parse(response.body).projects;
+
         for (let project of projects) {
             
-            const deferred = Q.defer();
+            const innerDeferred = Q.defer();
 
-            promises.push(deferred.promise);
+            promises.push(innerDeferred.promise);
 
             wait++;
             setTimeout(() => {
@@ -136,83 +155,106 @@ request({
                             }
                         }
 
-                        deferred.resolve();
+                        innerDeferred.resolve();
 
                     }
 
-                    deferred.reject();
+                    innerDeferred.reject(null);
                     
                 });
             }, wait * 1500);
 
         }
 
-
-
-
-        // Continue after all tasks mapped
-        const proceed = (worklogs): any => {
-            
-            console.log(`Found ${worklogs.length} matching tasks in Project Manager on ${targetDate.format("MM/DD/YYYY")}`);
-            console.log(`\x1b[36m`, `Proceeding to log work...`, `\x1b[0m`);
-
-            let wait = 0,
-                count = 0,
-                promises = [];
-
-            for (let worklog of worklogs) {
-                wait++;
-
-                const key = worklog.key,
-                    deferred = Q.defer();
-
-                promises.push(deferred.promise);
-
-                worklog.date = moment(worklog.jira.date).format("YYYY-MM-DD");
-                worklog.hours = Math.round(worklog.jira.time / 60 / 60 * 100) / 100;
-
-                setTimeout(() => {
-                    request({
-                        method: "POST",
-                        url: `https://api.projectmanager.com/api/v1/timesheets.json`,
-                        headers: config.PM_HEADERS,
-                        form: worklog
-                    }, (err, response) => {
-
-                        count++;
-                        
-                        if (err) {
-                            console.error("ERROR Logging work", err);
-                        } else if (response.statusCode !== 200) {
-                            console.error(`Task ${key} does not exist!`);
-                        } else {
-                            console.log(`Logged ${worklog.hours} hours for ${key} on ${moment(worklog.jira.date).format("MM/DD/YYYY")} (Task ${count}/${worklogs.length})`);
-                            deferred.resolve();
-                        }
-
-                        deferred.reject();
-
-                                                
-                    });
-
-                }, wait * 1500);
-
-            };
-
-            return Q.allSettled(promises);
-            
-        };
-
-
-        Q.allSettled(promises).then((promises) => {
-            proceed(output).then(() => {
-                console.log(`\x1b[42m`, `Success!`, `\x1b[0m`);
-            }, err => {
-               console.log(`\x1b[41m`, `Error!`, `\x1b[0m`);
-            });
+        Q.allSettled(promises).then(() => {
+            deferred.resolve(output);
+        }, err => {
+            deferred.reject(null);
         });
 
 
+    });
+
+    return deferred.promise;
+
+};
+
+
+// Continue after all tasks mapped
+const performLogging = (worklogs): Q.Promise<any> => {
+    
+    console.log(`Found ${worklogs.length} matching tasks in Project Manager on ${targetDate.format("MM/DD/YYYY")}`);
+    console.log(`\x1b[36m`, `Proceeding to log work...`, `\x1b[0m`);
+
+    let wait = 0,
+        count = 0,
+        promises = [],
+        deferred = Q.defer();
+
+    for (let worklog of worklogs) {
+        wait++;
+
+        const key = worklog.key,
+            innerDeferred = Q.defer();
+
+        promises.push(innerDeferred.promise);
+
+        worklog.date = moment(worklog.jira.date).format("YYYY-MM-DD");
+        worklog.hours = Math.round(worklog.jira.time / 60 / 60 * 100) / 100;
+
+        setTimeout(() => {
+            request({
+                method: "POST",
+                url: `https://api.projectmanager.com/api/v1/timesheets.json`,
+                headers: config.PM_HEADERS,
+                form: worklog
+            }, (err, response) => {
+
+                count++;
+                
+                if (err) {
+                    console.error("ERROR Logging work", err);
+                } else if (response.statusCode !== 200) {
+                    console.error(`Task ${key} does not exist!`);
+                } else {
+                    console.log(`Logged ${worklog.hours} hours for ${key} on ${moment(worklog.jira.date).format("MM/DD/YYYY")} (Task ${count}/${worklogs.length})`);
+                    innerDeferred.resolve();
+                }
+
+                innerDeferred.reject(null);
+
+                                        
+            });
+
+        }, wait * 1500);
+
+    };
+
+    Q.allSettled(promises).then(() => {
+        deferred.resolve();
+    }, err => {
+        deferred.reject(null);
+    });
+
+    return deferred.promise;
+    
+};
+
+
+
+
+// Run Application
+getJIRAWorklogs().then((jiraTaskMap) => {
+
+    console.log(`Found ${Object.keys(jiraTaskMap).length} issues with JIRA Tempo worklogs on ${targetDate.format("MM/DD/YYYY")}`);
+
+    getProjectManagerTasks(jiraTaskMap).then((worklogs) => {
+
+        performLogging(worklogs).then(() => {
+            console.log(`\x1b[42m`, `Success in ${new Date().getTime() - start.getTime()}ms!`, `\x1b[0m`);
+        }, err => {
+            console.log(`\x1b[41m`, `Error!`, `\x1b[0m`);
+        });
 
     });
 
