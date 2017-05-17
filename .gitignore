@@ -61,6 +61,7 @@ typings/
 
 # Ignore configuration
 config.json
+.vscode
 
 # Ignore generated files
 app.js
