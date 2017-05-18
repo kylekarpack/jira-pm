@@ -13,6 +13,7 @@ import * as request from "request";
 import * as moment from "moment";
 import * as minimist from "minimist";
 import * as Q from "Q";
+import * as atob from "atob";
 
 
 // Get configuration
@@ -49,6 +50,12 @@ if (args.d) {
 // Constants
 const url: string = `https://net-inspect.atlassian.net/rest/api/latest/search?fields=worklog,status&jql=worklogAuthor = currentUser() AND worklogDate = ${targetDateString}`;
 
+// Get current user email from API headers
+let auth: string = config.JIRA_HEADERS.Authorization,
+    b64 = auth.split(" ")[1],
+    decoded = atob(b64),
+    email = decoded.split(":")[0].toLowerCase();
+
 
 // Functions
 const getJIRAWorklogs = (): Q.Promise<any> => {
@@ -72,18 +79,22 @@ const getJIRAWorklogs = (): Q.Promise<any> => {
             
             for (let log of issue.fields.worklog.worklogs) {
                 
-                // Ensure the day of the worklog is correct
-                if (moment(log.created).isSame(targetDate, "d")) {
-                    if (jiraTaskMap[issue.key]) {
-                        jiraTaskMap[issue.key].time += log.timeSpentSeconds;
-                    } else {
-                        jiraTaskMap[issue.key] = {
-                            date: moment(log.created).toDate(),
-                            time: log.timeSpentSeconds ,
-                            status: issue.fields.status && issue.fields.status.name 
-                        };
-                    }
-                }            
+                // Ensure the user of the worklog is correct
+                if (log.author.emailAddress === email) {
+                    // Ensure the day of the worklog is correct
+                    if (moment(log.created).isSame(targetDate, "d")) {
+                        if (jiraTaskMap[issue.key]) {
+                            jiraTaskMap[issue.key].time += log.timeSpentSeconds;
+                        } else {
+                            jiraTaskMap[issue.key] = {
+                                date: moment(log.created).toDate(),
+                                time: log.timeSpentSeconds ,
+                                status: issue.fields.status && issue.fields.status.name 
+                            };
+                        }
+                    }     
+                }
+
             }
         }
 
@@ -182,9 +193,6 @@ const getProjectManagerTasks = (jiraTaskMap): Q.Promise<any> => {
 
 // Continue after all tasks mapped
 const performLogging = (worklogs): Q.Promise<any> => {
-    
-    console.log(`Found ${worklogs.length} matching tasks in Project Manager on ${targetDate.format("MM/DD/YYYY")}`);
-    console.log(`\x1b[36m`, `Proceeding to log work...`, `\x1b[0m`);
 
     let wait = 0,
         count = 0,
@@ -249,6 +257,9 @@ getJIRAWorklogs().then((jiraTaskMap) => {
     console.log(`Found ${Object.keys(jiraTaskMap).length} issues with JIRA Tempo worklogs on ${targetDate.format("MM/DD/YYYY")}`);
 
     getProjectManagerTasks(jiraTaskMap).then((worklogs) => {
+
+        console.log(`Found ${worklogs.length} matching tasks in Project Manager on ${targetDate.format("MM/DD/YYYY")}`);
+        console.log(`\x1b[36m`, `Proceeding to log work...`, `\x1b[0m`);
 
         performLogging(worklogs).then(() => {
             console.log(`\x1b[42m`, `Success in ${new Date().getTime() - start.getTime()}ms!`, `\x1b[0m`);
