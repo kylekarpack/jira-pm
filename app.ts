@@ -254,7 +254,7 @@ const performLogging = (worklogs): Q.Promise<any> => {
 // Run Application
 getJIRAWorklogs().then((jiraTaskMap) => {
 
-    console.log(`Found ${Object.keys(jiraTaskMap).length} issues with JIRA Tempo worklogs on ${targetDate.format("MM/DD/YYYY")}`);
+    console.log(`Found ${Object.keys(jiraTaskMap).length} issues with JIRA Tempo worklogs by ${email} on ${targetDate.format("MM/DD/YYYY")}`);
 
     getProjectManagerTasks(jiraTaskMap).then((worklogs) => {
 
