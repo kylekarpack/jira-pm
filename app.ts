@@ -16,6 +16,13 @@ import * as minimist from "minimist";
 import * as Q from "Q";
 import * as atob from "atob";
 
+asdf
+asdf
+asdf
+asdf
+
+asdfasdf
+
 
 // Get configuration
 const config: IConfig = require("./config.json"),
