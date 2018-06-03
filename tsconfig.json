@@ -13,4 +13,8 @@
         "types": ["node"],
         "typeRoots": ["./interfaces"]
     }
+<<<<<<< HEAD
 }asdfasdf other side of conflict
+=======
+}CONFLICT
+>>>>>>> origin/test-delete-me
